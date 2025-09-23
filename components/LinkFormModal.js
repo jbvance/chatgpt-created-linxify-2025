@@ -2,15 +2,17 @@
 'use client';
 
 import { Modal, Button, Form, Spinner } from 'react-bootstrap';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { useState } from 'react';
+import CreatableSelect from 'react-select/creatable';
 
 const schema = yup.object().shape({
   url: yup.string().url('Must be a valid URL').required('URL is required'),
   linkTitle: yup.string().required('Title is required'),
   linkDescription: yup.string().optional(),
+  tags: yup.array().of(yup.string()),
 });
 
 export default function LinkFormModal({
@@ -24,27 +26,38 @@ export default function LinkFormModal({
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors },
     reset,
   } = useForm({
     resolver: yupResolver(schema),
-    defaultValues: editLink || { url: '', linkTitle: '', linkDescription: '' },
+    defaultValues: editLink || {
+      url: '',
+      linkTitle: '',
+      linkDescription: '',
+      tags: [],
+    },
   });
 
   const onSubmit = async (data) => {
     setLoading(true);
+    const payload = {
+      ...data,
+      tags: data.tags || [],
+    };
+
     try {
       if (editLink) {
         await fetch(`/api/links/${editLink.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
+          body: JSON.stringify(payload),
         });
       } else {
         await fetch('/api/links', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
+          body: JSON.stringify(payload),
         });
       }
       reset();
@@ -97,6 +110,30 @@ export default function LinkFormModal({
             <Form.Control.Feedback type="invalid">
               {errors.linkDescription?.message}
             </Form.Control.Feedback>
+          </Form.Group>
+
+          <Form.Group className="mb-3">
+            <Form.Label>Tags</Form.Label>
+            <Controller
+              name="tags"
+              control={control}
+              render={({ field }) => (
+                <CreatableSelect
+                  isMulti
+                  {...field}
+                  value={(field.value || []).map((tag) => ({
+                    label: tag,
+                    value: tag,
+                  }))}
+                  onChange={(selected) =>
+                    field.onChange(selected.map((s) => s.value))
+                  }
+                />
+              )}
+            />
+            {errors.tags && (
+              <div className="text-danger small">{errors.tags.message}</div>
+            )}
           </Form.Group>
         </Modal.Body>
         <Modal.Footer>

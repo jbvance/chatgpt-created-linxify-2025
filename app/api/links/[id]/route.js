@@ -12,11 +12,16 @@ export async function PUT(req, { params }) {
 
   const { id } = params;
   const body = await req.json();
-  const { url, linkTitle, linkDescription } = body;
+  const { url, linkTitle, linkDescription, tags } = body;
 
   const updated = await prisma.link.update({
     where: { id: parseInt(id), userId: session.user.id },
-    data: { url, linkTitle, linkDescription },
+    data: {
+      url,
+      linkTitle,
+      linkDescription,
+      tags: Array.isArray(tags) ? tags : [],
+    },
   });
 
   return NextResponse.json(updated);

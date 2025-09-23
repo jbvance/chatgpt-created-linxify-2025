@@ -27,7 +27,7 @@ export async function POST(req) {
   }
 
   const body = await req.json();
-  const { url, linkTitle, linkDescription } = body;
+  const { url, linkTitle, linkDescription, tags } = body;
 
   if (!url || !linkTitle) {
     return NextResponse.json(
@@ -41,8 +41,8 @@ export async function POST(req) {
       url,
       linkTitle,
       linkDescription,
+      tags: Array.isArray(tags) ? tags : [],
       userId: session.user.id,
-      tags: [],
     },
   });
 

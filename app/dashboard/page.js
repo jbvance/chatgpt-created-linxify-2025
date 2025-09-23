@@ -318,7 +318,8 @@ export default function DashboardPage() {
           ) : filteredLinks.length === 0 ? (
             // Empty state
             <div className="text-center py-5 text-muted">
-              <Image
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
                 src="/empty-links.svg"
                 alt="No links yet"
                 width={150}
@@ -351,15 +352,13 @@ export default function DashboardPage() {
                         }`}
                       >
                         {/* Preview image (optional) */}
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         {link.imageUrl && (
-                          <Image
+                          <img
                             src={link.imageUrl}
                             alt={link.linkTitle || 'Preview'}
-                            width={640}
-                            height={360}
                             className="img-fluid"
                             style={{ width: '100%', height: 'auto' }}
-                            unoptimized
                           />
                         )}
 
@@ -371,14 +370,14 @@ export default function DashboardPage() {
                           >
                             <div className="d-flex align-items-center mb-2">
                               {/* Favicon — using unoptimized Image or <img> */}
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
                               {link.faviconUrl ? (
-                                <Image
+                                <img
                                   src={link.faviconUrl}
                                   alt="favicon"
                                   width={16}
                                   height={16}
                                   className="me-2"
-                                  unoptimized
                                 />
                               ) : null}
                               <Card.Title className="mb-0">

@@ -89,10 +89,12 @@ export default function ReaderPage() {
 
   const saveHighlight = async () => {
     try {
+      const normalized = selectedText.replace(/\s+/g, ' ').trim();
+
       const res = await fetch('/api/highlights', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ linkId: id, text: selectedText, note }),
+        body: JSON.stringify({ linkId: id, text: normalized, note }),
       });
 
       if (!res.ok) {
@@ -114,42 +116,38 @@ export default function ReaderPage() {
     }
   };
 
-  // Helper: apply highlights to HTML
+  // Helper: apply highlights to HTML node-by-node
   function applyHighlights(html, highlights) {
     if (!html || highlights.length === 0) return parse(html);
 
     return parse(html, {
       replace: (domNode) => {
-        // Process text nodes only
         if (domNode.type === 'text') {
           let text = domNode.data;
+          const normalizedText = text.replace(/\s+/g, ' ');
 
-          // Iterate through highlights and replace matches
           const parts = [];
-          let remaining = text;
+          let remaining = normalizedText;
 
           highlights.forEach((h) => {
-            const idx = remaining.indexOf(h.text);
+            const target = h.text.replace(/\s+/g, ' ');
+            const idx = remaining.indexOf(target);
             if (idx !== -1) {
-              // Before match
-              if (idx > 0) {
-                parts.push(remaining.slice(0, idx));
-              }
+              if (idx > 0) parts.push(remaining.slice(0, idx));
 
-              // Highlighted part
               parts.push(
-                <mark
+                <OverlayTrigger
                   key={`${h.id}-${idx}`}
-                  id={`highlight-${h.id}`}
-                  title={h.note || ''}
-                  className="highlight-mark"
+                  placement="top"
+                  overlay={h.note ? <Tooltip>{h.note}</Tooltip> : <></>}
                 >
-                  {h.text}
-                </mark>
+                  <mark id={`highlight-${h.id}`} className="highlight-mark">
+                    {target}
+                  </mark>
+                </OverlayTrigger>
               );
 
-              // Update remaining text
-              remaining = remaining.slice(idx + h.text.length);
+              remaining = remaining.slice(idx + target.length);
             }
           });
 
@@ -240,7 +238,7 @@ export default function ReaderPage() {
           )}
         </div>
 
-        {/* Highlights Sidebar as a single accordion */}
+        {/* Highlights Sidebar */}
         <div className="col-md-4">
           <Accordion defaultActiveKey={null}>
             <Accordion.Item eventKey="0">

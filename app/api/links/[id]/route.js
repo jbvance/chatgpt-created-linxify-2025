@@ -1,66 +1,137 @@
-// app/api/links/[id]/route.js
-import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { fetchAndArchiveContent } from '@/lib/archive';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { authOptions } from '../../auth/[...nextauth]/route';
 
-// PUT update link
-export async function PUT(req, { params }) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const { id } = params;
-  const body = await req.json();
-  const {
-    url,
-    linkTitle,
-    linkDescription,
-    tags,
-    categoryIds,
-    faviconUrl,
-    imageUrl,
-  } = body;
-
+// GET a single link by ID
+export async function GET(req, context) {
+  const { id } = await context.params;
   try {
-    const link = await prisma.link.update({
-      where: { id: parseInt(id) },
-      data: {
-        url,
-        linkTitle,
-        linkDescription,
-        tags: Array.isArray(tags) ? tags : [],
-        faviconUrl,
-        imageUrl,
-        categories: {
-          deleteMany: {}, // remove old associations
-          create: categoryIds?.map((cid) => ({
-            category: { connect: { id: cid } },
-          })),
-        },
-      },
+    const link = await prisma.link.findUnique({
+      where: { id: Number(id) },
       include: { categories: { include: { category: true } } },
     });
-    return NextResponse.json(link);
+
+    if (!link) {
+      return new Response(JSON.stringify({ error: 'Link not found' }), {
+        status: 404,
+      });
+    }
+
+    return new Response(JSON.stringify(link), { status: 200 });
   } catch (err) {
-    return NextResponse.json({ error: 'Link not found' }, { status: 404 });
+    console.error('Error fetching link:', err);
+    return new Response(JSON.stringify({ error: 'Failed to fetch link' }), {
+      status: 500,
+    });
   }
 }
 
-// DELETE link
-export async function DELETE(req, { params }) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const { id } = params;
-
+// UPDATE an existing link
+export async function PUT(req, context) {
+  const { id } = await context.params;
   try {
-    await prisma.link.delete({ where: { id: parseInt(id) } });
-    return NextResponse.json({ success: true });
+    const session = await getServerSession(authOptions);
+
+    if (!session || !session.user?.id) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+      });
+    }
+
+    const body = await req.json();
+
+    // Make sure the link belongs to the logged-in user
+    const existing = await prisma.link.findUnique({
+      where: { id: Number(id) },
+    });
+
+    if (!existing) {
+      return new Response(JSON.stringify({ error: 'Link not found' }), {
+        status: 404,
+      });
+    }
+
+    if (existing.userId !== session.user.id) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403,
+      });
+    }
+
+    const updated = await prisma.link.update({
+      where: { id: Number(id) },
+      data: {
+        url: body.url,
+        linkTitle: body.linkTitle,
+        linkDescription: body.linkDescription,
+        faviconUrl: body.faviconUrl,
+        imageUrl: body.imageUrl,
+        tags: body.tags,
+        categories: {
+          deleteMany: {}, // clear existing categories
+          create: (body.categoryIds || []).map((cid) => ({ categoryId: cid })),
+        },
+      },
+    });
+
+    // 🔹 If URL changed → re-archive
+    if (body.url && body.url !== existing.url) {
+      fetchAndArchiveContent(body.url).then(async (content) => {
+        if (content) {
+          await prisma.link.update({
+            where: { id: updated.id },
+            data: { archivedContent: content },
+          });
+        }
+      });
+    }
+
+    return new Response(JSON.stringify(updated), { status: 200 });
   } catch (err) {
-    return NextResponse.json({ error: 'Link not found' }, { status: 404 });
+    console.error('Error updating link:', err);
+    return new Response(JSON.stringify({ error: 'Failed to update link' }), {
+      status: 500,
+    });
+  }
+}
+
+// DELETE a link
+export async function DELETE(req, context) {
+  const { id } = await context.params;
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session || !session.user?.id) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+      });
+    }
+
+    const existing = await prisma.link.findUnique({
+      where: { id: Number(id) },
+    });
+
+    if (!existing) {
+      return new Response(JSON.stringify({ error: 'Link not found' }), {
+        status: 404,
+      });
+    }
+
+    if (existing.userId !== session.user.id) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403,
+      });
+    }
+
+    await prisma.link.delete({
+      where: { id: Number(id) },
+    });
+
+    return new Response(JSON.stringify({ success: true }), { status: 200 });
+  } catch (err) {
+    console.error('Error deleting link:', err);
+    return new Response(JSON.stringify({ error: 'Failed to delete link' }), {
+      status: 500,
+    });
   }
 }

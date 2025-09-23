@@ -1,79 +1,101 @@
-// app/api/links/route.js
-import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { fetchAndArchiveContent } from '@/lib/archive';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { authOptions } from '../auth/[...nextauth]/route';
 
-// GET all links for current user (with categories + pagination)
+// GET all links (with pagination) for the logged-in user
 export async function GET(req) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session || !session.user?.id) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+      });
+    }
+
+    const userId = session.user.id;
+
+    const { searchParams } = new URL(req.url);
+    const page = parseInt(searchParams.get('page')) || 1;
+    const pageSize = parseInt(searchParams.get('pageSize')) || 10;
+
+    const [links, total] = await Promise.all([
+      prisma.link.findMany({
+        where: { userId }, // ✅ only this user's links
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: { categories: { include: { category: true } } },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.link.count({ where: { userId } }),
+    ]);
+
+    return new Response(JSON.stringify({ links, total }), { status: 200 });
+  } catch (err) {
+    console.error('Error fetching links:', err);
+    return new Response(JSON.stringify({ error: 'Failed to fetch links' }), {
+      status: 500,
+    });
   }
-
-  const { searchParams } = new URL(req.url);
-  const page = parseInt(searchParams.get('page') || '1');
-  const pageSize = parseInt(searchParams.get('pageSize') || '9');
-  const skip = (page - 1) * pageSize;
-
-  const [links, total] = await Promise.all([
-    prisma.link.findMany({
-      where: { userId: session.user.id },
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: pageSize,
-      include: { categories: { include: { category: true } } },
-    }),
-    prisma.link.count({ where: { userId: session.user.id } }),
-  ]);
-
-  return NextResponse.json({ links, total, page, pageSize });
 }
 
-// POST create a new link
+// CREATE a new link
 export async function POST(req) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  try {
+    const session = await getServerSession(authOptions);
 
-  const body = await req.json();
-  const {
-    url,
-    linkTitle,
-    linkDescription,
-    tags,
-    categoryIds,
-    faviconUrl,
-    imageUrl,
-  } = body;
+    if (!session || !session.user?.id) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+      });
+    }
 
-  if (!url || !linkTitle) {
-    return NextResponse.json(
-      { error: 'URL and title required' },
-      { status: 400 }
-    );
-  }
+    const userId = session.user.id;
 
-  const link = await prisma.link.create({
-    data: {
+    const body = await req.json();
+    const {
       url,
       linkTitle,
       linkDescription,
       faviconUrl,
       imageUrl,
-      tags: Array.isArray(tags) ? tags : [],
-      userId: session.user.id,
-      categories: categoryIds
-        ? {
-            create: categoryIds.map((cid) => ({
-              category: { connect: { id: cid } },
-            })),
-          }
-        : undefined,
-    },
-    include: { categories: { include: { category: true } } },
-  });
+      tags,
+      categoryIds,
+    } = body;
 
-  return NextResponse.json(link);
+    const link = await prisma.link.create({
+      data: {
+        url,
+        linkTitle,
+        linkDescription,
+        faviconUrl,
+        imageUrl,
+        tags,
+        user: {
+          connect: { id: userId },
+        },
+        categories: {
+          create: (categoryIds || []).map((cid) => ({ categoryId: cid })),
+        },
+      },
+    });
+
+    // 🔹 Archive content in background
+    fetchAndArchiveContent(url).then(async (content) => {
+      if (content) {
+        await prisma.link.update({
+          where: { id: link.id },
+          data: { archivedContent: content },
+        });
+      }
+    });
+
+    return new Response(JSON.stringify(link), { status: 201 });
+  } catch (err) {
+    console.error('Error creating link:', err);
+    return new Response(JSON.stringify({ error: 'Failed to create link' }), {
+      status: 500,
+    });
+  }
 }

@@ -1,9 +1,30 @@
 /* app/globals.scss */
 
-/* Import Bootstrap SCSS (we’ll override variables in Step 3 before this import) */
+/* -----------------------------------
+   Bootstrap Theme Customization
+----------------------------------- */
+
+// Override Bootstrap variables BEFORE the import
+$primary: #0d6efd; // Linxify blue
+$secondary: #6c757d;
+$body-bg: #f9fafb;
+$body-color: #212529;
+$font-family-sans-serif:
+  'Inter',
+  system-ui,
+  -apple-system,
+  'Segoe UI',
+  Roboto,
+  'Helvetica Neue',
+  Arial,
+  sans-serif;
+
+// Import Bootstrap SCSS
 @import 'bootstrap/scss/bootstrap';
 
-/* Light base tweaks (we’ll build a real theme later) */
+/* -----------------------------------
+   Global styles
+----------------------------------- */
 html,
 body {
   min-height: 100%;

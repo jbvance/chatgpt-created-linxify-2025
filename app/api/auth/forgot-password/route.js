@@ -1,8 +1,9 @@
-// app/api/auth/forgot-password/route.js
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import prisma from '@/lib/prisma';
 import resend from '@/lib/resend';
+
+const RESET_TOKEN_EXPIRY_HOURS = 1;
 
 export async function POST(req) {
   try {
@@ -12,72 +13,53 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
-
-    // Always respond the same to avoid user enumeration
-    const genericOk = NextResponse.json({
-      message: 'If that email exists, a reset link has been sent.',
-    });
-
-    if (!user) {
-      return genericOk;
-    }
-
-    // Generate secure token + 15 min expiry
-    const token = crypto.randomBytes(32).toString('hex');
-    const expiry = new Date(Date.now() + 1000 * 60 * 15);
-
-    await prisma.user.update({
+    const user = await prisma.user.findUnique({
       where: { email },
-      data: {
-        resetPasswordToken: token,
-        resetPasswordTokenExpiry: expiry,
-      },
     });
 
-    // Build reset URL using your public app base (NextAuth URL works here)
-    const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
-    const resetUrl = `${baseUrl}/auth/reset-password?token=${token}`;
+    if (user) {
+      // Generate secure token
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiry = new Date(
+        Date.now() + RESET_TOKEN_EXPIRY_HOURS * 60 * 60 * 1000
+      );
 
-    // Send the email via Resend
-    const from = process.env.RESEND_FROM || 'Linxify <no-reply@example.com>';
-    const subject = 'Reset your Linxify password';
-    const html = `
-      <div style="font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;color:#111">
-        <h2>Reset your password</h2>
-        <p>We received a request to reset your Linxify password.</p>
-        <p>This link will expire in <strong>15 minutes</strong>:</p>
-        <p>
-          <a href="${resetUrl}" style="display:inline-block;padding:10px 16px;border-radius:6px;background:#0d6efd;color:#fff;text-decoration:none;">
-            Reset Password
-          </a>
-        </p>
-        <p>Or copy and paste this URL into your browser:</p>
-        <p style="word-break:break-all;"><a href="${resetUrl}">${resetUrl}</a></p>
-        <p>If you didn’t request this, you can safely ignore this email.</p>
-      </div>
-    `;
-    const text = `Reset your Linxify password (expires in 15 minutes): ${resetUrl}`;
-
-    try {
-      await resend.emails.send({
-        from,
-        to: email,
-        subject,
-        html,
-        text,
+      // Save token + expiry
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          resetPasswordToken: token,
+          resetPasswordTokenExpiry: expiry,
+        },
       });
-    } catch (e) {
-      // Don’t leak email send errors to the client; just log server-side
-      console.error('Resend send error:', e);
-      // We still return generic OK to avoid leaking whether email exists
+
+      // Send email with reset link
+      const resetUrl = `${process.env.NEXTAUTH_URL}/auth/reset-password?token=${token}`;
+
+      try {
+        await resend.emails.send({
+          from: 'no-reply@vancelawfirmtx.com',
+          to: user.email,
+          subject: 'Reset your Linxify password',
+          html: `
+            <p>Hello,</p>
+            <p>You requested a password reset. Click the link below to reset it:</p>
+            <p><a href="${resetUrl}">${resetUrl}</a></p>
+            <p>This link will expire in ${RESET_TOKEN_EXPIRY_HOURS} hour(s).</p>
+          `,
+        });
+      } catch (emailErr) {
+        console.error('Error sending reset email:', emailErr);
+        // Fail silently to not expose info
+      }
     }
 
-    return genericOk;
-  } catch (error) {
-    console.error('Forgot password error:', error);
+    // Always return success (so attackers can’t check if email exists)
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    console.error('Forgot password error:', err);
     return NextResponse.json(
-      { error: 'Internal Server Error' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

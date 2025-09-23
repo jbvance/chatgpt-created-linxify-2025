@@ -1,106 +1,101 @@
-// app/auth/login/page.js
 'use client';
 
-import { useState, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
+import { Form, Button, Spinner, Alert } from 'react-bootstrap';
 import { useForm } from 'react-hook-form';
-import { yupResolver } from '@hookform/resolvers/yup';
-import * as yup from 'yup';
-import { Alert, Button, Form, Spinner } from 'react-bootstrap';
 
-// Validation schema
-const schema = yup.object().shape({
-  email: yup.string().email('Invalid email').required('Email is required'),
-  password: yup.string().required('Password is required'),
-});
-
-function LoginForm() {
-  const router = useRouter();
+import { useSearchParams } from 'next/navigation';
+function CallbackHandler({ onReady }) {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get('callbackUrl') || '/';
+  onReady(callbackUrl);
+  return null;
+}
 
-  const [errorMessage, setErrorMessage] = useState(null);
+export default function LoginPage() {
+  const router = useRouter();
+  const [callbackUrl, setCallbackUrl] = useState('/');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm({
-    resolver: yupResolver(schema),
-  });
+  } = useForm();
 
   const onSubmit = async (data) => {
     setLoading(true);
-    setErrorMessage(null);
+    setError(null);
+    try {
+      const res = await signIn('credentials', {
+        redirect: false,
+        email: data.email,
+        password: data.password,
+        callbackUrl,
+      });
 
-    const res = await signIn('credentials', {
-      redirect: false,
-      email: data.email,
-      password: data.password,
-      callbackUrl,
-    });
-
-    setLoading(false);
-
-    if (res?.error) {
-      setErrorMessage('Invalid email or password');
-    } else {
-      router.push(res.url || '/');
+      if (res?.error) {
+        setError(res.error);
+      } else if (res?.url) {
+        router.push(res.url);
+      }
+    } catch (err) {
+      console.error(err);
+      setError('Unexpected error');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <main className="container py-5" style={{ maxWidth: '500px' }}>
-      <h1 className="mb-4 text-center">Login</h1>
+    <div className="container py-5" style={{ maxWidth: '400px' }}>
+      <Suspense fallback={null}>
+        <CallbackHandler onReady={setCallbackUrl} />
+      </Suspense>
 
-      {errorMessage && <Alert variant="danger">{errorMessage}</Alert>}
+      <h2 className="mb-4">Sign In</h2>
+      {error && <Alert variant="danger">{error}</Alert>}
 
       <Form onSubmit={handleSubmit(onSubmit)}>
-        <Form.Group className="mb-3" controlId="email">
+        <Form.Group className="mb-3">
           <Form.Label>Email</Form.Label>
           <Form.Control
             type="email"
-            placeholder="Enter email"
-            {...register('email')}
-            isInvalid={!!errors.email}
+            {...register('email', { required: 'Email is required' })}
           />
-          <Form.Control.Feedback type="invalid">
-            {errors.email?.message}
-          </Form.Control.Feedback>
+          {errors.email && (
+            <small className="text-danger">{errors.email.message}</small>
+          )}
         </Form.Group>
 
-        <Form.Group className="mb-3" controlId="password">
+        <Form.Group className="mb-3">
           <Form.Label>Password</Form.Label>
           <Form.Control
             type="password"
-            placeholder="Enter password"
-            {...register('password')}
-            isInvalid={!!errors.password}
+            {...register('password', { required: 'Password is required' })}
           />
-          <Form.Control.Feedback type="invalid">
-            {errors.password?.message}
-          </Form.Control.Feedback>
+          {errors.password && (
+            <small className="text-danger">{errors.password.message}</small>
+          )}
         </Form.Group>
 
         <Button
-          variant="primary"
           type="submit"
+          variant="primary"
           disabled={loading}
           className="w-100"
         >
-          {loading ? <Spinner size="sm" animation="border" /> : 'Sign In'}
+          {loading ? <Spinner animation="border" size="sm" /> : 'Sign In'}
         </Button>
       </Form>
-    </main>
-  );
-}
 
-export default function LoginPage() {
-  return (
-    <Suspense fallback={<p>Loading login...</p>}>
-      <LoginForm />
-    </Suspense>
+      {/* 🔹 Forgot password link */}
+      <div className="text-center mt-3">
+        <a href="/auth/forgot-password">Forgot your password?</a>
+      </div>
+    </div>
   );
 }

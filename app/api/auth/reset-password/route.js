@@ -1,7 +1,6 @@
-// app/api/auth/reset-password/route.js
 import { NextResponse } from 'next/server';
-import bcrypt from 'bcrypt';
 import prisma from '@/lib/prisma';
+import bcrypt from 'bcrypt';
 
 export async function POST(req) {
   try {
@@ -9,27 +8,38 @@ export async function POST(req) {
 
     if (!token || !password) {
       return NextResponse.json(
-        { error: 'Missing token or password' },
+        { error: 'Token and new password are required' },
         { status: 400 }
       );
     }
 
-    const user = await prisma.user.findFirst({
-      where: {
-        resetPasswordToken: token,
-        resetPasswordTokenExpiry: { gt: new Date() },
-      },
+    // Find user by token
+    const user = await prisma.user.findUnique({
+      where: { resetPasswordToken: token },
     });
 
     if (!user) {
       return NextResponse.json(
-        { error: 'Invalid or expired token' },
+        { error: 'Invalid or expired reset token' },
         { status: 400 }
       );
     }
 
+    // Check expiry
+    if (
+      !user.resetPasswordTokenExpiry ||
+      user.resetPasswordTokenExpiry < new Date()
+    ) {
+      return NextResponse.json(
+        { error: 'Reset token has expired' },
+        { status: 400 }
+      );
+    }
+
+    // Hash new password
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Update user: set new password, clear token + expiry
     await prisma.user.update({
       where: { id: user.id },
       data: {
@@ -39,13 +49,11 @@ export async function POST(req) {
       },
     });
 
-    return NextResponse.json({
-      message: 'Password has been reset successfully',
-    });
-  } catch (error) {
-    console.error('Reset password error:', error);
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    console.error('Reset password error:', err);
     return NextResponse.json(
-      { error: 'Internal Server Error' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

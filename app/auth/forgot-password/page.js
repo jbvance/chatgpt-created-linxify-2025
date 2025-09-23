@@ -1,82 +1,88 @@
-// app/auth/forgot-password/page.js
 'use client';
 
 import { useState } from 'react';
+import { Form, Button, Alert, Spinner } from 'react-bootstrap';
 import { useForm } from 'react-hook-form';
-import { yupResolver } from '@hookform/resolvers/yup';
-import * as yup from 'yup';
-import { Alert, Button, Form, Spinner } from 'react-bootstrap';
-
-const schema = yup.object().shape({
-  email: yup.string().email('Invalid email').required('Email is required'),
-});
 
 export default function ForgotPasswordPage() {
-  const [message, setMessage] = useState(null);
-  const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState(null);
 
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm({ resolver: yupResolver(schema) });
+  } = useForm();
 
-  const onSubmit = async (data) => {
+  const onSubmit = async ({ email }) => {
     setLoading(true);
     setError(null);
-    setMessage(null);
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
 
-    const res = await fetch('/api/auth/forgot-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
+      if (!res.ok) {
+        const { error } = await res.json();
+        throw new Error(error || 'Failed to process request');
+      }
 
-    const json = await res.json();
-
-    if (!res.ok) {
-      setError(json.error || 'Something went wrong');
-    } else {
-      setMessage(json.message);
+      setSubmitted(true);
+    } catch (err) {
+      console.error(err);
+      setError('Something went wrong. Please try again later.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
-    <main className="container py-5" style={{ maxWidth: '500px' }}>
-      <h1 className="mb-4 text-center">Forgot Password</h1>
+    <div className="container py-5" style={{ maxWidth: '400px' }}>
+      <h2 className="mb-4">Forgot Password</h2>
 
-      {error && <Alert variant="danger">{error}</Alert>}
-      {message && <Alert variant="success">{message}</Alert>}
+      {submitted ? (
+        <Alert variant="success">
+          If an account exists with that email, you’ll receive a password reset
+          link shortly.
+        </Alert>
+      ) : (
+        <Form onSubmit={handleSubmit(onSubmit)}>
+          {error && <Alert variant="danger">{error}</Alert>}
 
-      <Form onSubmit={handleSubmit(onSubmit)}>
-        <Form.Group className="mb-3" controlId="email">
-          <Form.Label>Email</Form.Label>
-          <Form.Control
-            type="email"
-            placeholder="Enter email"
-            {...register('email')}
-            isInvalid={!!errors.email}
-          />
-          <Form.Control.Feedback type="invalid">
-            {errors.email?.message}
-          </Form.Control.Feedback>
-        </Form.Group>
+          <Form.Group className="mb-3">
+            <Form.Label>Email address</Form.Label>
+            <Form.Control
+              type="email"
+              placeholder="Enter your email"
+              {...register('email', { required: 'Email is required' })}
+            />
+            {errors.email && (
+              <small className="text-danger">{errors.email.message}</small>
+            )}
+          </Form.Group>
 
-        <Button
-          variant="primary"
-          type="submit"
-          disabled={loading}
-          className="w-100"
-        >
-          {loading ? (
-            <Spinner size="sm" animation="border" />
-          ) : (
-            'Send Reset Link'
-          )}
-        </Button>
-      </Form>
-    </main>
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={loading}
+            className="w-100"
+          >
+            {loading ? (
+              <Spinner animation="border" size="sm" />
+            ) : (
+              'Send Reset Link'
+            )}
+          </Button>
+        </Form>
+      )}
+
+      {/* 🔹 Back to login link */}
+      <div className="text-center mt-3">
+        <a href="/auth/login">Back to login</a>
+      </div>
+    </div>
   );
 }

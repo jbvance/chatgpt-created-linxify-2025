@@ -1,8 +1,15 @@
 'use client';
 
-import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import {
+  useEffect,
+  useState,
+  useMemo,
+  useRef,
+  useCallback,
+  Suspense,
+} from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import {
   Button,
   Card,
@@ -11,17 +18,28 @@ import {
   Form,
   InputGroup,
 } from 'react-bootstrap';
-import Image from 'next/image';
 import toast from 'react-hot-toast';
 import CreatableSelect from 'react-select/creatable';
 
 import CategorySidebar from '@/components/CategorySidebar';
 import LinkFormModal from '@/components/LinkFormModal';
 
-export default function DashboardPage() {
-  const { data: session, status } = useSession();
-  const router = useRouter();
+// 🔹 QuickSaveHandler wrapped in Suspense
+import { useSearchParams } from 'next/navigation';
+function QuickSaveHandler({ onQuickSave }) {
   const searchParams = useSearchParams();
+  const addUrl = searchParams.get('addUrl');
+
+  if (addUrl) {
+    onQuickSave(addUrl);
+  }
+
+  return null;
+}
+
+export default function DashboardPage() {
+  const { status } = useSession();
+  const router = useRouter();
 
   // Links + paging
   const [links, setLinks] = useState([]);
@@ -52,23 +70,6 @@ export default function DashboardPage() {
       router.push('/auth/login');
     }
   }, [status, router]);
-
-  // ---------- Quick-Save modal trigger (/add?url=...) ----------
-  useEffect(() => {
-    const addUrl = searchParams.get('addUrl');
-    if (addUrl) {
-      setEditLink(null);
-      setQuickSaveUrl(addUrl);
-      setShowModal(true);
-
-      // remove addUrl from the URL so refresh doesn't reopen the modal
-      const params = new URLSearchParams(window.location.search);
-      params.delete('addUrl');
-      const newUrl =
-        window.location.pathname + (params.toString() ? `?${params}` : '');
-      window.history.replaceState({}, '', newUrl);
-    }
-  }, [searchParams]);
 
   // ---------- Fetching ----------
   const fetchLinks = useCallback(
@@ -153,7 +154,7 @@ export default function DashboardPage() {
     return Array.from(tagSet).sort();
   }, [links]);
 
-  // ---------- Client-side filtering/sorting on the loaded set ----------
+  // ---------- Client-side filtering/sorting ----------
   const filteredLinks = useMemo(() => {
     let result = [...links];
 
@@ -164,14 +165,14 @@ export default function DashboardPage() {
       );
     }
 
-    // Tag filter (must include all selected)
+    // Tag filter
     if (selectedTags.length > 0) {
       result = result.filter((link) =>
         selectedTags.every((t) => link.tags?.includes(t))
       );
     }
 
-    // Text search (title/desc/url/tags)
+    // Text search
     if (search.trim() !== '') {
       const q = search.toLowerCase();
       result = result.filter(
@@ -199,7 +200,6 @@ export default function DashboardPage() {
         );
         break;
       default:
-        // newest
         result.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     }
 
@@ -227,11 +227,29 @@ export default function DashboardPage() {
 
   const hasMore = links.length < total;
 
+  // ---------- QuickSave handler callback ----------
+  const handleQuickSave = (url) => {
+    setEditLink(null);
+    setQuickSaveUrl(url);
+    setShowModal(true);
+
+    // clean up the URL
+    const params = new URLSearchParams(window.location.search);
+    params.delete('addUrl');
+    const newUrl =
+      window.location.pathname + (params.toString() ? `?${params}` : '');
+    window.history.replaceState({}, '', newUrl);
+  };
+
   // ---------- Render ----------
   return (
     <main className="container-fluid py-5">
+      {/* Suspense wrapper for useSearchParams */}
+      <Suspense fallback={null}>
+        <QuickSaveHandler onQuickSave={handleQuickSave} />
+      </Suspense>
+
       <div className="row">
-        {/* Sidebar (Categories) */}
         <div className="col-md-3 mb-4">
           <CategorySidebar
             selectedCategoryId={selectedCategoryId}
@@ -239,16 +257,14 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* Main column */}
         <div className="col-md-9">
           <div className="d-flex justify-content-between align-items-center mb-4">
             <h1 className="h3 mb-0">My Links</h1>
             <Button onClick={() => setShowModal(true)}>Add Link</Button>
           </div>
 
-          {/* Filters row */}
+          {/* Filters */}
           <div className="row mb-4 g-3 align-items-end">
-            {/* Tag filter (multi) */}
             <div className="col-md-4">
               {allTags.length > 0 && (
                 <CreatableSelect
@@ -260,8 +276,6 @@ export default function DashboardPage() {
                 />
               )}
             </div>
-
-            {/* Text search */}
             <div className="col-md-4">
               <InputGroup>
                 <Form.Control
@@ -280,8 +294,6 @@ export default function DashboardPage() {
                 )}
               </InputGroup>
             </div>
-
-            {/* Sort */}
             <div className="col-md-4">
               <Form.Select
                 value={sort}
@@ -295,7 +307,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Loading skeletons (first page) */}
+          {/* Skeletons */}
           {loading ? (
             <div className="row g-3">
               {Array.from({ length: pageSize }).map((_, i) => (
@@ -316,7 +328,6 @@ export default function DashboardPage() {
               ))}
             </div>
           ) : filteredLinks.length === 0 ? (
-            // Empty state
             <div className="text-center py-5 text-muted">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -336,7 +347,6 @@ export default function DashboardPage() {
             </div>
           ) : (
             <>
-              {/* Cards */}
               <div className="row g-3">
                 {filteredLinks.map((link, idx) => {
                   const isLast = idx === filteredLinks.length - 1;
@@ -347,13 +357,10 @@ export default function DashboardPage() {
                       ref={isLast ? lastElementRef : null}
                     >
                       <Card
-                        className={`link-card h-100 ${
-                          link.loaded ? 'loaded' : ''
-                        }`}
+                        className={`link-card h-100 ${link.loaded ? 'loaded' : ''}`}
                       >
-                        {/* Preview image (optional) */}
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         {link.imageUrl && (
+                          // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={link.imageUrl}
                             alt={link.linkTitle || 'Preview'}
@@ -369,9 +376,8 @@ export default function DashboardPage() {
                             style={{ cursor: 'pointer' }}
                           >
                             <div className="d-flex align-items-center mb-2">
-                              {/* Favicon — using unoptimized Image or <img> */}
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              {link.faviconUrl ? (
+                              {link.faviconUrl && (
+                                // eslint-disable-next-line @next/next/no-img-element
                                 <img
                                   src={link.faviconUrl}
                                   alt="favicon"
@@ -379,7 +385,7 @@ export default function DashboardPage() {
                                   height={16}
                                   className="me-2"
                                 />
-                              ) : null}
+                              )}
                               <Card.Title className="mb-0">
                                 {link.linkTitle || link.url || 'Untitled'}
                               </Card.Title>
@@ -387,7 +393,6 @@ export default function DashboardPage() {
                             <Card.Text className="mb-2">
                               {link.linkDescription || 'No description'}
                             </Card.Text>
-
                             {link.tags?.length > 0 && (
                               <div className="mb-2">
                                 {link.tags.map((tag) => (
@@ -441,14 +446,12 @@ export default function DashboardPage() {
                 })}
               </div>
 
-              {/* Loading more spinner */}
               {loadingMore && (
                 <div className="text-center py-3">
                   <Spinner animation="border" />
                 </div>
               )}
 
-              {/* Load More fallback */}
               {!loadingMore && hasMore && (
                 <div className="text-center py-3">
                   <Button
@@ -467,7 +470,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Link modal */}
       {showModal && (
         <LinkFormModal
           show={showModal}

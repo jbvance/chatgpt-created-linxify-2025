@@ -13,7 +13,15 @@ export async function PUT(req, { params }) {
 
   const { id } = params;
   const body = await req.json();
-  const { url, linkTitle, linkDescription, tags, categoryIds } = body;
+  const {
+    url,
+    linkTitle,
+    linkDescription,
+    tags,
+    categoryIds,
+    faviconUrl,
+    imageUrl,
+  } = body;
 
   try {
     const link = await prisma.link.update({
@@ -23,6 +31,8 @@ export async function PUT(req, { params }) {
         linkTitle,
         linkDescription,
         tags: Array.isArray(tags) ? tags : [],
+        faviconUrl,
+        imageUrl,
         categories: {
           deleteMany: {}, // remove old associations
           create: categoryIds?.map((cid) => ({

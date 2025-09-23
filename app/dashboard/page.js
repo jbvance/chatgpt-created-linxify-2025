@@ -58,7 +58,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const addUrl = searchParams.get('addUrl');
     if (addUrl) {
-      setEditLink(null); // new link, not editing
+      setEditLink(null); // new link
       setQuickSaveUrl(addUrl);
       setShowModal(true);
 
@@ -87,14 +87,25 @@ export default function DashboardPage() {
       );
       const data = await res.json();
       if (reset) {
-        setLinks(Array.isArray(data.links) ? data.links : []);
+        setLinks(
+          Array.isArray(data.links)
+            ? data.links.map((l) => ({ ...l, loaded: false }))
+            : []
+        );
       } else {
         setLinks((prev) => [
           ...prev,
-          ...(Array.isArray(data.links) ? data.links : []),
+          ...(Array.isArray(data.links)
+            ? data.links.map((l) => ({ ...l, loaded: false }))
+            : []),
         ]);
       }
       setTotal(data.total || 0);
+
+      // 🔹 Mark cards as loaded after paint
+      setTimeout(() => {
+        setLinks((prev) => prev.map((l) => ({ ...l, loaded: true })));
+      }, 50);
     } catch (err) {
       toast.error('Failed to load links');
       console.error('Error fetching links:', err);
@@ -269,7 +280,7 @@ export default function DashboardPage() {
           {loading ? (
             <div className="row g-3">
               {Array.from({ length: pageSize }).map((_, i) => (
-                <div className="col-md-4" key={i}>
+                <div className="col-12 col-sm-6 col-lg-4" key={i}>
                   <Card>
                     <Card.Body>
                       <Placeholder as={Card.Title} animation="wave">
@@ -287,9 +298,18 @@ export default function DashboardPage() {
             </div>
           ) : filteredLinks.length === 0 ? (
             <div className="text-center py-5 text-muted">
-              {selectedTags.length > 0 || search || selectedCategoryId !== null
-                ? 'No links match your filters.'
-                : 'You don’t have any saved links yet. Click Add Link to get started!'}
+              <img
+                src="/empty-links.svg"
+                alt="No links yet"
+                style={{ width: '150px', marginBottom: '1rem', opacity: 0.6 }}
+              />
+              <p>
+                {selectedTags.length > 0 ||
+                search ||
+                selectedCategoryId !== null
+                  ? 'No links match your filters.'
+                  : 'You don’t have any saved links yet. Click Add Link to get started!'}
+              </p>
             </div>
           ) : (
             <>
@@ -298,36 +318,60 @@ export default function DashboardPage() {
                   const isLast = idx === filteredLinks.length - 1;
                   return (
                     <div
-                      className="col-md-4"
+                      className="col-12 col-sm-6 col-lg-4"
                       key={link.id}
                       ref={isLast ? lastElementRef : null}
                     >
-                      <Card>
-                        <Card.Body>
-                          <Card.Title>{link.linkTitle}</Card.Title>
-                          <Card.Text>
-                            {link.linkDescription || 'No description'}
-                          </Card.Text>
-                          {link.tags?.length > 0 && (
-                            <div className="mb-2">
-                              {link.tags.map((tag) => (
-                                <span
-                                  key={tag}
-                                  className="badge bg-secondary me-1"
-                                >
-                                  {tag}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                          <a
-                            href={link.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="small"
+                      <Card
+                        className={`link-card h-100 ${
+                          link.loaded ? 'loaded' : ''
+                        }`}
+                      >
+                        {link.imageUrl && (
+                          <Card.Img
+                            variant="top"
+                            src={link.imageUrl}
+                            alt={link.linkTitle}
+                          />
+                        )}
+                        <Card.Body className="d-flex flex-column">
+                          <div
+                            className="flex-grow-1"
+                            onClick={() => window.open(link.url, '_blank')}
+                            style={{ cursor: 'pointer' }}
                           >
-                            Visit
-                          </a>
+                            <div className="d-flex align-items-center mb-2">
+                              {link.faviconUrl && (
+                                <img
+                                  src={link.faviconUrl}
+                                  alt="favicon"
+                                  style={{
+                                    width: '16px',
+                                    height: '16px',
+                                    marginRight: '8px',
+                                  }}
+                                />
+                              )}
+                              <Card.Title className="mb-0">
+                                {link.linkTitle}
+                              </Card.Title>
+                            </div>
+                            <Card.Text>
+                              {link.linkDescription || 'No description'}
+                            </Card.Text>
+                            {link.tags?.length > 0 && (
+                              <div className="mb-2">
+                                {link.tags.map((tag) => (
+                                  <span
+                                    key={tag}
+                                    className="badge rounded-pill bg-primary me-2"
+                                  >
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                           <div className="mt-3 d-flex justify-content-between">
                             <Button
                               size="sm"
@@ -359,14 +403,12 @@ export default function DashboardPage() {
                 })}
               </div>
 
-              {/* Infinite scroll loading indicator */}
               {loadingMore && (
                 <div className="text-center py-3">
                   <Spinner animation="border" />
                 </div>
               )}
 
-              {/* Fallback Load More button */}
               {!loadingMore && hasMore && (
                 <div className="text-center py-3">
                   <Button
@@ -398,7 +440,7 @@ export default function DashboardPage() {
             resetAndFetch();
           }}
           editLink={editLink}
-          quickSaveUrl={quickSaveUrl} // pass down for prefill
+          quickSaveUrl={quickSaveUrl}
         />
       )}
     </main>

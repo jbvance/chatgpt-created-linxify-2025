@@ -1,103 +1,107 @@
+import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { getServerSession } from 'next-auth';
+import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../auth/[...nextauth]/route';
 
-// GET a single highlight
-export async function GET(req, context) {
-  const { id } = await context.params;
+// GET /api/highlights?linkId=123
+export async function GET(req) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || !session.user?.id) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-      });
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const highlight = await prisma.highlight.findUnique({
-      where: { id: Number(id) },
+    const { searchParams } = new URL(req.url);
+    const linkId = searchParams.get('linkId');
+
+    if (!linkId) {
+      return NextResponse.json({ error: 'Missing linkId' }, { status: 400 });
+    }
+
+    const highlights = await prisma.highlight.findMany({
+      where: {
+        linkId: Number(linkId),
+        userId: session.user.id,
+      },
+      orderBy: { createdAt: 'desc' },
     });
-    if (!highlight || highlight.userId !== session.user.id) {
-      return new Response(JSON.stringify({ error: 'Highlight not found' }), {
-        status: 404,
-      });
-    }
 
-    return new Response(JSON.stringify(highlight), { status: 200 });
+    return NextResponse.json(highlights);
   } catch (err) {
-    console.error('Error fetching highlight:', err);
-    return new Response(
-      JSON.stringify({ error: 'Failed to fetch highlight' }),
+    console.error('GET /api/highlights error:', err);
+    return NextResponse.json(
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
 }
 
-// UPDATE a highlight
-export async function PUT(req, context) {
-  const { id } = await context.params;
+// POST /api/highlights
+export async function POST(req) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || !session.user?.id) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-      });
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const existing = await prisma.highlight.findUnique({
-      where: { id: Number(id) },
-    });
-    if (!existing || existing.userId !== session.user.id) {
-      return new Response(JSON.stringify({ error: 'Highlight not found' }), {
-        status: 404,
-      });
+    const { linkId, text, note } = await req.json();
+
+    if (!linkId || !text) {
+      return NextResponse.json(
+        { error: 'linkId and text are required' },
+        { status: 400 }
+      );
     }
 
-    const body = await req.json();
-    const updated = await prisma.highlight.update({
-      where: { id: Number(id) },
+    const highlight = await prisma.highlight.create({
       data: {
-        text: body.text,
-        note: body.note,
+        text,
+        note,
+        link: { connect: { id: Number(linkId) } },
+        user: { connect: { id: session.user.id } },
       },
     });
 
-    return new Response(JSON.stringify(updated), { status: 200 });
+    return NextResponse.json(highlight);
   } catch (err) {
-    console.error('Error updating highlight:', err);
-    return new Response(
-      JSON.stringify({ error: 'Failed to update highlight' }),
+    console.error('POST /api/highlights error:', err);
+    return NextResponse.json(
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
 }
 
-// DELETE a highlight
+// DELETE /api/highlights/:id
 export async function DELETE(req, context) {
-  const { id } = await context.params;
   try {
     const session = await getServerSession(authOptions);
-    if (!session || !session.user?.id) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-      });
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const existing = await prisma.highlight.findUnique({
+    const { id } = await context.params;
+
+    if (!id) {
+      return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+    }
+
+    // Verify ownership before delete
+    const highlight = await prisma.highlight.findUnique({
       where: { id: Number(id) },
     });
-    if (!existing || existing.userId !== session.user.id) {
-      return new Response(JSON.stringify({ error: 'Highlight not found' }), {
-        status: 404,
-      });
+
+    if (!highlight || highlight.userId !== session.user.id) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
     await prisma.highlight.delete({ where: { id: Number(id) } });
 
-    return new Response(JSON.stringify({ success: true }), { status: 200 });
+    return NextResponse.json({ success: true });
   } catch (err) {
-    console.error('Error deleting highlight:', err);
-    return new Response(
-      JSON.stringify({ error: 'Failed to delete highlight' }),
+    console.error('DELETE /api/highlights error:', err);
+    return NextResponse.json(
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

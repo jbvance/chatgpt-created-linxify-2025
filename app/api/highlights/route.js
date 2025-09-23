@@ -1,103 +1,72 @@
+import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { getServerSession } from 'next-auth';
+import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../auth/[...nextauth]/route';
 
-// GET a single category
-export async function GET(req, context) {
-  const { id } = await context.params;
+// GET /api/highlights?linkId=123
+export async function GET(req) {
   try {
     const session = await getServerSession(authOptions);
-
-    if (!session || !session.user?.id) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-      });
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const category = await prisma.category.findUnique({
-      where: { id: Number(id) },
+    const { searchParams } = new URL(req.url);
+    const linkId = searchParams.get('linkId');
+
+    if (!linkId) {
+      return NextResponse.json({ error: 'Missing linkId' }, { status: 400 });
+    }
+
+    const highlights = await prisma.highlight.findMany({
+      where: {
+        linkId: Number(linkId),
+        userId: session.user.id,
+      },
+      orderBy: { createdAt: 'desc' },
     });
 
-    if (!category || category.userId !== session.user.id) {
-      return new Response(JSON.stringify({ error: 'Category not found' }), {
-        status: 404,
-      });
-    }
-
-    return new Response(JSON.stringify(category), { status: 200 });
+    return NextResponse.json(highlights);
   } catch (err) {
-    console.error('Error fetching category:', err);
-    return new Response(JSON.stringify({ error: 'Failed to fetch category' }), {
-      status: 500,
-    });
-  }
-}
-
-// UPDATE a category
-export async function PUT(req, context) {
-  const { id } = await context.params;
-  try {
-    const session = await getServerSession(authOptions);
-
-    if (!session || !session.user?.id) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-      });
-    }
-
-    const existing = await prisma.category.findUnique({
-      where: { id: Number(id) },
-    });
-    if (!existing || existing.userId !== session.user.id) {
-      return new Response(JSON.stringify({ error: 'Category not found' }), {
-        status: 404,
-      });
-    }
-
-    const body = await req.json();
-    const updated = await prisma.category.update({
-      where: { id: Number(id) },
-      data: { categoryDescription: body.categoryDescription },
-    });
-
-    return new Response(JSON.stringify(updated), { status: 200 });
-  } catch (err) {
-    console.error('Error updating category:', err);
-    return new Response(
-      JSON.stringify({ error: 'Failed to update category' }),
+    console.error('GET /api/highlights error:', err);
+    return NextResponse.json(
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
 }
 
-// DELETE a category
-export async function DELETE(req, context) {
-  const { id } = await context.params;
+// POST /api/highlights
+export async function POST(req) {
   try {
     const session = await getServerSession(authOptions);
-
-    if (!session || !session.user?.id) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-      });
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const existing = await prisma.category.findUnique({
-      where: { id: Number(id) },
+    const { linkId, text, note } = await req.json();
+
+    if (!linkId || !text) {
+      return NextResponse.json(
+        { error: 'linkId and text are required' },
+        { status: 400 }
+      );
+    }
+
+    const highlight = await prisma.highlight.create({
+      data: {
+        text,
+        note,
+        link: { connect: { id: Number(linkId) } },
+        user: { connect: { id: session.user.id } },
+      },
     });
-    if (!existing || existing.userId !== session.user.id) {
-      return new Response(JSON.stringify({ error: 'Category not found' }), {
-        status: 404,
-      });
-    }
 
-    await prisma.category.delete({ where: { id: Number(id) } });
-
-    return new Response(JSON.stringify({ success: true }), { status: 200 });
+    return NextResponse.json(highlight);
   } catch (err) {
-    console.error('Error deleting category:', err);
-    return new Response(
-      JSON.stringify({ error: 'Failed to delete category' }),
+    console.error('POST /api/highlights error:', err);
+    return NextResponse.json(
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

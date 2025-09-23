@@ -1,18 +1,20 @@
 // components/LinkFormModal.js
 'use client';
 
+import { useEffect, useState } from 'react';
 import { Modal, Button, Form, Spinner } from 'react-bootstrap';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
-import { useState } from 'react';
 import CreatableSelect from 'react-select/creatable';
+import toast from 'react-hot-toast';
 
-const schema = yup.object().shape({
+const schema = yup.object({
   url: yup.string().url('Must be a valid URL').required('URL is required'),
   linkTitle: yup.string().required('Title is required'),
-  linkDescription: yup.string().optional(),
+  linkDescription: yup.string().nullable(),
   tags: yup.array().of(yup.string()),
+  categoryIds: yup.array().of(yup.number()),
 });
 
 export default function LinkFormModal({
@@ -21,67 +23,94 @@ export default function LinkFormModal({
   onSaved,
   editLink,
 }) {
-  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [categories, setCategories] = useState([]);
 
   const {
+    control,
     register,
     handleSubmit,
-    control,
-    formState: { errors },
     reset,
+    formState: { errors },
   } = useForm({
     resolver: yupResolver(schema),
-    defaultValues: editLink || {
+    defaultValues: {
       url: '',
       linkTitle: '',
       linkDescription: '',
       tags: [],
+      categoryIds: [],
     },
   });
 
-  const onSubmit = async (data) => {
-    setLoading(true);
-    const payload = {
-      ...data,
-      tags: data.tags || [],
-    };
+  useEffect(() => {
+    fetchCategories();
+  }, []);
 
-    try {
-      if (editLink) {
-        await fetch(`/api/links/${editLink.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-      } else {
-        await fetch('/api/links', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-      }
-      reset();
-      handleClose();
-      onSaved();
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (editLink) {
+      reset({
+        url: editLink.url || '',
+        linkTitle: editLink.linkTitle || '',
+        linkDescription: editLink.linkDescription || '',
+        tags: editLink.tags || [],
+        categoryIds: editLink.categories?.map((c) => c.categoryId) || [],
+      });
+    } else {
+      reset({
+        url: '',
+        linkTitle: '',
+        linkDescription: '',
+        tags: [],
+        categoryIds: [],
+      });
     }
+  }, [editLink, reset]);
+
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch('/api/categories');
+      const data = await res.json();
+      setCategories(Array.isArray(data) ? data : []);
+    } catch (err) {
+      toast.error('Failed to load categories');
+    }
+  };
+
+  const onSubmit = async (data) => {
+    setSaving(true);
+    try {
+      const res = await fetch(
+        editLink ? `/api/links/${editLink.id}` : '/api/links',
+        {
+          method: editLink ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        }
+      );
+      if (res.ok) {
+        toast.success(`Link ${editLink ? 'updated' : 'added'}`);
+        onSaved();
+        handleClose();
+      } else {
+        toast.error('Failed to save link');
+      }
+    } catch (err) {
+      toast.error('Error saving link');
+    }
+    setSaving(false);
   };
 
   return (
     <Modal show={show} onHide={handleClose}>
-      <Modal.Header closeButton>
-        <Modal.Title>{editLink ? 'Edit Link' : 'Add Link'}</Modal.Title>
-      </Modal.Header>
       <Form onSubmit={handleSubmit(onSubmit)}>
+        <Modal.Header closeButton>
+          <Modal.Title>{editLink ? 'Edit Link' : 'Add Link'}</Modal.Title>
+        </Modal.Header>
         <Modal.Body>
           <Form.Group className="mb-3">
             <Form.Label>URL</Form.Label>
-            <Form.Control
-              type="text"
-              {...register('url')}
-              isInvalid={!!errors.url}
-            />
+            <Form.Control {...register('url')} isInvalid={!!errors.url} />
             <Form.Control.Feedback type="invalid">
               {errors.url?.message}
             </Form.Control.Feedback>
@@ -90,7 +119,6 @@ export default function LinkFormModal({
           <Form.Group className="mb-3">
             <Form.Label>Title</Form.Label>
             <Form.Control
-              type="text"
               {...register('linkTitle')}
               isInvalid={!!errors.linkTitle}
             />
@@ -103,27 +131,47 @@ export default function LinkFormModal({
             <Form.Label>Description</Form.Label>
             <Form.Control
               as="textarea"
-              rows={3}
+              rows={2}
               {...register('linkDescription')}
-              isInvalid={!!errors.linkDescription}
             />
-            <Form.Control.Feedback type="invalid">
-              {errors.linkDescription?.message}
-            </Form.Control.Feedback>
           </Form.Group>
 
           <Form.Group className="mb-3">
             <Form.Label>Tags</Form.Label>
             <Controller
-              name="tags"
               control={control}
+              name="tags"
               render={({ field }) => (
                 <CreatableSelect
                   isMulti
                   {...field}
-                  value={(field.value || []).map((tag) => ({
-                    label: tag,
-                    value: tag,
+                  value={field.value.map((t) => ({ label: t, value: t }))}
+                  onChange={(selected) =>
+                    field.onChange(selected.map((s) => s.value))
+                  }
+                />
+              )}
+            />
+          </Form.Group>
+
+          <Form.Group className="mb-3">
+            <Form.Label>Categories</Form.Label>
+            <Controller
+              control={control}
+              name="categoryIds"
+              render={({ field }) => (
+                <CreatableSelect
+                  isMulti
+                  {...field}
+                  value={categories
+                    .filter((c) => field.value.includes(c.id))
+                    .map((c) => ({
+                      label: c.categoryDescription,
+                      value: c.id,
+                    }))}
+                  options={categories.map((c) => ({
+                    label: c.categoryDescription,
+                    value: c.id,
                   }))}
                   onChange={(selected) =>
                     field.onChange(selected.map((s) => s.value))
@@ -131,17 +179,14 @@ export default function LinkFormModal({
                 />
               )}
             />
-            {errors.tags && (
-              <div className="text-danger small">{errors.tags.message}</div>
-            )}
           </Form.Group>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={handleClose} disabled={loading}>
+          <Button variant="secondary" onClick={handleClose} disabled={saving}>
             Cancel
           </Button>
-          <Button type="submit" disabled={loading}>
-            {loading ? <Spinner size="sm" animation="border" /> : 'Save'}
+          <Button type="submit" disabled={saving}>
+            {saving ? <Spinner size="sm" /> : 'Save'}
           </Button>
         </Modal.Footer>
       </Form>

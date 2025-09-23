@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 
+// PUT update link
 export async function PUT(req, { params }) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
@@ -12,21 +13,32 @@ export async function PUT(req, { params }) {
 
   const { id } = params;
   const body = await req.json();
-  const { url, linkTitle, linkDescription, tags } = body;
+  const { url, linkTitle, linkDescription, tags, categoryIds } = body;
 
-  const updated = await prisma.link.update({
-    where: { id: parseInt(id), userId: session.user.id },
-    data: {
-      url,
-      linkTitle,
-      linkDescription,
-      tags: Array.isArray(tags) ? tags : [],
-    },
-  });
-
-  return NextResponse.json(updated);
+  try {
+    const link = await prisma.link.update({
+      where: { id: parseInt(id) },
+      data: {
+        url,
+        linkTitle,
+        linkDescription,
+        tags: Array.isArray(tags) ? tags : [],
+        categories: {
+          deleteMany: {}, // remove old associations
+          create: categoryIds?.map((cid) => ({
+            category: { connect: { id: cid } },
+          })),
+        },
+      },
+      include: { categories: { include: { category: true } } },
+    });
+    return NextResponse.json(link);
+  } catch (err) {
+    return NextResponse.json({ error: 'Link not found' }, { status: 404 });
+  }
 }
 
+// DELETE link
 export async function DELETE(req, { params }) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
@@ -35,9 +47,10 @@ export async function DELETE(req, { params }) {
 
   const { id } = params;
 
-  await prisma.link.delete({
-    where: { id: parseInt(id), userId: session.user.id },
-  });
-
-  return NextResponse.json({ message: 'Link deleted' });
+  try {
+    await prisma.link.delete({ where: { id: parseInt(id) } });
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    return NextResponse.json({ error: 'Link not found' }, { status: 404 });
+  }
 }

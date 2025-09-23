@@ -4,7 +4,7 @@ import prisma from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 
-// GET all links for current user (with pagination)
+// GET all links for current user (with categories + pagination)
 export async function GET(req) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
@@ -22,6 +22,7 @@ export async function GET(req) {
       orderBy: { createdAt: 'desc' },
       skip,
       take: pageSize,
+      include: { categories: { include: { category: true } } },
     }),
     prisma.link.count({ where: { userId: session.user.id } }),
   ]);
@@ -37,7 +38,7 @@ export async function POST(req) {
   }
 
   const body = await req.json();
-  const { url, linkTitle, linkDescription, tags } = body;
+  const { url, linkTitle, linkDescription, tags, categoryIds } = body;
 
   if (!url || !linkTitle) {
     return NextResponse.json(
@@ -53,7 +54,15 @@ export async function POST(req) {
       linkDescription,
       tags: Array.isArray(tags) ? tags : [],
       userId: session.user.id,
+      categories: categoryIds
+        ? {
+            create: categoryIds.map((cid) => ({
+              category: { connect: { id: cid } },
+            })),
+          }
+        : undefined,
     },
+    include: { categories: { include: { category: true } } },
   });
 
   return NextResponse.json(link);

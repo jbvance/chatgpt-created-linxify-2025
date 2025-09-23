@@ -136,4 +136,24 @@ a {
     background-color: #ffeb3b !important;
     transition: background-color 1.5s ease-out;
   }
+  .highlight-mark {
+    background-color: #ffeb3b;
+    cursor: pointer;
+  }
+  .highlight-mark:hover {
+    background-color: #ffe082;
+  }
+}
+
+.flash-highlight {
+  background-color: #ffeb3b !important;
+  transition: background-color 1.5s ease-out;
+}
+
+.highlight-mark {
+  background-color: #ffeb3b;
+  cursor: pointer;
+}
+.highlight-mark:hover {
+  background-color: #ffe082;
 }

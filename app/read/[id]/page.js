@@ -115,41 +115,52 @@ export default function ReaderPage() {
   };
 
   // Helper: apply highlights to HTML
-  const applyHighlights = (html, highlights) => {
-    if (!html) return null;
-    if (!highlights || highlights.length === 0) return parse(html);
+  function applyHighlights(html, highlights) {
+    if (!html || highlights.length === 0) return parse(html);
 
-    let modified = html;
-    highlights.forEach((h) => {
-      const safeText = h.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(safeText, 'g');
-      modified = modified.replace(
-        regex,
-        `<mark data-hid="${h.id}" title="${h.note || ''}">${h.text}</mark>`
-      );
-    });
-
-    return parse(modified, {
+    return parse(html, {
       replace: (domNode) => {
-        if (domNode.name === 'mark' && domNode.attribs?.['data-hid']) {
-          const hid = domNode.attribs['data-hid'];
-          const note = domNode.attribs.title;
-          const children = domToReact(domNode.children);
-          if (note) {
-            return (
-              <OverlayTrigger
-                placement="top"
-                overlay={<Tooltip>{note}</Tooltip>}
-              >
-                <mark id={`highlight-${hid}`}>{children}</mark>
-              </OverlayTrigger>
-            );
+        // Process text nodes only
+        if (domNode.type === 'text') {
+          let text = domNode.data;
+
+          // Iterate through highlights and replace matches
+          const parts = [];
+          let remaining = text;
+
+          highlights.forEach((h) => {
+            const idx = remaining.indexOf(h.text);
+            if (idx !== -1) {
+              // Before match
+              if (idx > 0) {
+                parts.push(remaining.slice(0, idx));
+              }
+
+              // Highlighted part
+              parts.push(
+                <mark
+                  key={`${h.id}-${idx}`}
+                  id={`highlight-${h.id}`}
+                  title={h.note || ''}
+                  className="highlight-mark"
+                >
+                  {h.text}
+                </mark>
+              );
+
+              // Update remaining text
+              remaining = remaining.slice(idx + h.text.length);
+            }
+          });
+
+          if (parts.length > 0) {
+            if (remaining) parts.push(remaining);
+            return <>{parts}</>;
           }
-          return <mark id={`highlight-${hid}`}>{children}</mark>;
         }
       },
     });
-  };
+  }
 
   const scrollToHighlight = (hid) => {
     const el = document.getElementById(`highlight-${hid}`);

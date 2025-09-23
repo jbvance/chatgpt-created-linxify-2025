@@ -1,0 +1,19 @@
+/* app/globals.scss */
+
+/* Import Bootstrap SCSS (we’ll override variables in Step 3 before this import) */
+@import 'bootstrap/scss/bootstrap';
+
+/* Light base tweaks (we’ll build a real theme later) */
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  text-decoration: none;
+}

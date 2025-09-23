@@ -21,7 +21,7 @@ const schema = yup.object().shape({
     .oneOf([yup.ref('password')], 'Passwords must match'),
 });
 
-export default function RegisterPage() {
+export default function RegisterForm() {
   const router = useRouter();
   const [errorMessage, setErrorMessage] = useState(null);
   const [loading, setLoading] = useState(false);

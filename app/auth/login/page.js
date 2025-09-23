@@ -1,7 +1,7 @@
 // app/auth/login/page.js
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { useForm } from 'react-hook-form';
@@ -15,7 +15,7 @@ const schema = yup.object().shape({
   password: yup.string().required('Password is required'),
 });
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get('callbackUrl') || '/';
@@ -94,5 +94,13 @@ export default function LoginPage() {
         </Button>
       </Form>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<p>Loading login...</p>}>
+      <LoginForm />
+    </Suspense>
   );
 }

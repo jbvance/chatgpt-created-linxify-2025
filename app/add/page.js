@@ -1,11 +1,11 @@
 // app/add/page.js
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 
-export default function AddPage() {
+function AddLinkForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { status } = useSession();
@@ -31,4 +31,12 @@ export default function AddPage() {
   }, [status, url, router]);
 
   return null;
+}
+
+export default function AddPage() {
+  return (
+    <Suspense fallback={<p>Loading login...</p>}>
+      <AddLinkForm />
+    </Suspense>
+  );
 }

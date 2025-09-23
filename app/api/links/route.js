@@ -84,10 +84,19 @@ export async function POST(req) {
     // 🔹 Archive content in background
     fetchAndArchiveContent(url).then(async (content) => {
       if (content) {
+        console.log(
+          '✅ *************************************************************************************Archived content fetched for',
+          url
+        );
         await prisma.link.update({
           where: { id: link.id },
           data: { archivedContent: content },
         });
+      } else {
+        console.log(
+          '⚠️ **************************************************************************************No content extracted for',
+          url
+        );
       }
     });
 

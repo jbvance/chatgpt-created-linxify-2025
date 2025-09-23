@@ -131,4 +131,9 @@ a {
     color: #555;
     font-style: italic;
   }
+
+  .flash-highlight {
+    background-color: #ffeb3b !important;
+    transition: background-color 1.5s ease-out;
+  }
 }

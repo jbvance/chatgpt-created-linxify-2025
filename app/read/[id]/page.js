@@ -2,8 +2,18 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Button, Spinner, Alert, Modal, Form } from 'react-bootstrap';
-import parse from 'html-react-parser';
+import {
+  Button,
+  Spinner,
+  Alert,
+  Modal,
+  Form,
+  OverlayTrigger,
+  Tooltip,
+  Accordion,
+  ListGroup,
+} from 'react-bootstrap';
+import parse, { domToReact } from 'html-react-parser';
 import toast from 'react-hot-toast';
 
 export default function ReaderPage() {
@@ -20,7 +30,8 @@ export default function ReaderPage() {
   const [selectedText, setSelectedText] = useState('');
   const [note, setNote] = useState('');
   const [buttonPos, setButtonPos] = useState(null);
-  const containerRef = useRef();
+
+  const contentRef = useRef();
 
   // Fetch link + highlights
   useEffect(() => {
@@ -98,6 +109,52 @@ export default function ReaderPage() {
     }
   };
 
+  // Helper: apply highlights to HTML
+  const applyHighlights = (html, highlights) => {
+    if (!html) return null;
+    if (!highlights || highlights.length === 0) return parse(html);
+
+    let modified = html;
+    highlights.forEach((h) => {
+      const safeText = h.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(safeText, 'g');
+      modified = modified.replace(
+        regex,
+        `<mark data-hid="${h.id}" title="${h.note || ''}">${h.text}</mark>`
+      );
+    });
+
+    return parse(modified, {
+      replace: (domNode) => {
+        if (domNode.name === 'mark' && domNode.attribs?.['data-hid']) {
+          const hid = domNode.attribs['data-hid'];
+          const note = domNode.attribs.title;
+          const children = domToReact(domNode.children);
+          if (note) {
+            return (
+              <OverlayTrigger
+                placement="top"
+                overlay={<Tooltip>{note}</Tooltip>}
+              >
+                <mark id={`highlight-${hid}`}>{children}</mark>
+              </OverlayTrigger>
+            );
+          }
+          return <mark id={`highlight-${hid}`}>{children}</mark>;
+        }
+      },
+    });
+  };
+
+  const scrollToHighlight = (hid) => {
+    const el = document.getElementById(`highlight-${hid}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('flash-highlight');
+      setTimeout(() => el.classList.remove('flash-highlight'), 1500);
+    }
+  };
+
   if (loading) {
     return (
       <div className="d-flex justify-content-center align-items-center vh-100">
@@ -120,7 +177,7 @@ export default function ReaderPage() {
   if (!link) return null;
 
   return (
-    <div className="container py-4" style={{ maxWidth: '800px' }}>
+    <div className="container py-4" style={{ maxWidth: '1200px' }}>
       <div className="d-flex justify-content-between align-items-center mb-3">
         <h2>{link.linkTitle || 'Untitled'}</h2>
         <div>
@@ -144,30 +201,95 @@ export default function ReaderPage() {
         </div>
       </div>
 
-      {/* Reader Content */}
-      <div
-        ref={containerRef}
-        className="reader-content"
-        onMouseUp={handleMouseUp}
-      >
-        {link.archivedContent ? (
-          parse(link.archivedContent)
-        ) : (
-          <div>
-            <p className="text-muted">
-              No archived copy available. Loading live site:
-            </p>
-            <iframe
-              src={link.url}
-              title="Live site"
-              style={{
-                width: '100%',
-                height: '80vh',
-                border: '1px solid #ddd',
-              }}
-            />
-          </div>
-        )}
+      <div className="row">
+        {/* Reader Content */}
+        <div className="col-md-8" onMouseUp={handleMouseUp} ref={contentRef}>
+          {link.archivedContent ? (
+            applyHighlights(link.archivedContent, highlights)
+          ) : (
+            <div>
+              <p className="text-muted">
+                No archived copy available. Loading live site:
+              </p>
+              <iframe
+                src={link.url}
+                title="Live site"
+                style={{
+                  width: '100%',
+                  height: '80vh',
+                  border: '1px solid #ddd',
+                }}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Highlights Sidebar as a single accordion */}
+        <div className="col-md-4">
+          <Accordion defaultActiveKey={null}>
+            <Accordion.Item eventKey="0">
+              <Accordion.Header>
+                Highlights ({highlights.length})
+              </Accordion.Header>
+              <Accordion.Body>
+                {highlights.length === 0 ? (
+                  <p className="text-muted mb-0">No highlights yet.</p>
+                ) : (
+                  <ListGroup variant="flush">
+                    {highlights.map((h) => {
+                      const excerpt =
+                        h.text.length > 100
+                          ? `${h.text.slice(0, 100)}…`
+                          : h.text;
+                      return (
+                        <ListGroup.Item
+                          key={h.id}
+                          className="d-flex justify-content-between align-items-start"
+                        >
+                          <div
+                            className="me-2 flex-grow-1"
+                            role="button"
+                            onClick={() => scrollToHighlight(h.id)}
+                          >
+                            <div className="fw-semibold">“{excerpt}”</div>
+                            {h.note && (
+                              <small className="text-muted">{h.note}</small>
+                            )}
+                          </div>
+                          <Button
+                            variant="outline-danger"
+                            size="sm"
+                            onClick={async (e) => {
+                              e.stopPropagation(); // prevent scroll-to-highlight
+                              try {
+                                const res = await fetch(
+                                  `/api/highlights/${h.id}`,
+                                  {
+                                    method: 'DELETE',
+                                  }
+                                );
+                                if (!res.ok) throw new Error('Delete failed');
+                                setHighlights((prev) =>
+                                  prev.filter((hl) => hl.id !== h.id)
+                                );
+                                toast.success('Highlight deleted');
+                              } catch (err) {
+                                console.error(err);
+                                toast.error('Error deleting highlight');
+                              }
+                            }}
+                          >
+                            ✕
+                          </Button>
+                        </ListGroup.Item>
+                      );
+                    })}
+                  </ListGroup>
+                )}
+              </Accordion.Body>
+            </Accordion.Item>
+          </Accordion>
+        </div>
       </div>
 
       {/* Floating highlight button */}

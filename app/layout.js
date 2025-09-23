@@ -3,6 +3,7 @@ import './globals.scss';
 import Providers from './providers';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import { Toaster } from 'react-hot-toast';
 
 export const metadata = {
   title: 'Linxify',
@@ -17,6 +18,7 @@ export default function RootLayout({ children }) {
           <Navbar />
           <main className="flex-grow-1">{children}</main>
           <Footer />
+          <Toaster position="top-right" />
         </Providers>
       </body>
     </html>

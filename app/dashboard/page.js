@@ -1,7 +1,7 @@
 // app/dashboard/page.js
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import {
@@ -9,24 +9,34 @@ import {
   Card,
   Placeholder,
   Spinner,
-  Alert,
   Form,
   InputGroup,
 } from 'react-bootstrap';
 import LinkFormModal from '@/components/LinkFormModal';
 import CreatableSelect from 'react-select/creatable';
+import toast from 'react-hot-toast';
 
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+
+  // Link state
   const [links, setLinks] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(9);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  // UI state
   const [showModal, setShowModal] = useState(false);
   const [editLink, setEditLink] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [selectedTags, setSelectedTags] = useState([]);
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState('newest');
+
+  const observerRef = useRef();
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -36,50 +46,79 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (status === 'authenticated') {
-      fetchLinks();
+      resetAndFetch();
     }
   }, [status]);
 
-  const fetchLinks = async () => {
-    setLoading(true);
+  const resetAndFetch = () => {
+    setLinks([]);
+    setPage(1);
+    fetchLinks(1, true);
+  };
+
+  const fetchLinks = async (pageNum, reset = false) => {
+    if (pageNum === 1) setLoading(true);
+    else setLoadingMore(true);
+
     try {
-      const res = await fetch('/api/links');
+      const res = await fetch(
+        `/api/links?page=${pageNum}&pageSize=${pageSize}`
+      );
       const data = await res.json();
-      setLinks(Array.isArray(data) ? data : []);
+      if (reset) {
+        setLinks(Array.isArray(data.links) ? data.links : []);
+      } else {
+        setLinks((prev) => [
+          ...prev,
+          ...(Array.isArray(data.links) ? data.links : []),
+        ]);
+      }
+      setTotal(data.total || 0);
     } catch (err) {
+      toast.error('Failed to load links');
       console.error('Error fetching links:', err);
     }
-    setLoading(false);
+
+    if (pageNum === 1) setLoading(false);
+    else setLoadingMore(false);
   };
 
   const handleDelete = async (id) => {
     setDeletingId(id);
-    await fetch(`/api/links/${id}`, { method: 'DELETE' });
+    try {
+      const res = await fetch(`/api/links/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        toast.success('Link deleted');
+        resetAndFetch();
+      } else {
+        toast.error('Failed to delete link');
+      }
+    } catch (err) {
+      toast.error('Error deleting link');
+      console.error(err);
+    }
     setDeletingId(null);
-    fetchLinks();
   };
 
-  // Collect all unique tags for filter dropdown
+  // Collect all unique tags
   const allTags = useMemo(() => {
     const tagSet = new Set();
-    links.forEach((link) => {
-      (link.tags || []).forEach((tag) => tagSet.add(tag));
-    });
+    links.forEach((link) =>
+      (link.tags || []).forEach((tag) => tagSet.add(tag))
+    );
     return Array.from(tagSet).sort();
   }, [links]);
 
-  // Filtered, searched, and sorted links
+  // Filter, search, sort (client-side)
   const filteredLinks = useMemo(() => {
     let result = [...links];
 
-    // Tag filter
     if (selectedTags.length > 0) {
       result = result.filter((link) =>
         selectedTags.every((tag) => link.tags?.includes(tag))
       );
     }
 
-    // Text search
     if (search.trim() !== '') {
       const q = search.toLowerCase();
       result = result.filter(
@@ -91,7 +130,6 @@ export default function DashboardPage() {
       );
     }
 
-    // Sorting
     switch (sort) {
       case 'oldest':
         result.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
@@ -106,12 +144,31 @@ export default function DashboardPage() {
           (b.linkTitle || '').localeCompare(a.linkTitle || '')
         );
         break;
-      default: // newest
+      default:
         result.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     }
 
     return result;
   }, [links, selectedTags, search, sort]);
+
+  // Infinite scroll observer
+  const lastElementRef = useCallback(
+    (node) => {
+      if (loading || loadingMore) return;
+      if (observerRef.current) observerRef.current.disconnect();
+      observerRef.current = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && links.length < total) {
+          const nextPage = page + 1;
+          setPage(nextPage);
+          fetchLinks(nextPage);
+        }
+      });
+      if (node) observerRef.current.observe(node);
+    },
+    [loading, loadingMore, page, total, links.length]
+  );
+
+  const hasMore = links.length < total;
 
   return (
     <main className="container py-5">
@@ -163,7 +220,7 @@ export default function DashboardPage() {
       {/* Loading state */}
       {loading ? (
         <div className="row g-3">
-          {Array.from({ length: 6 }).map((_, i) => (
+          {Array.from({ length: pageSize }).map((_, i) => (
             <div className="col-md-4" key={i}>
               <Card>
                 <Card.Body>
@@ -175,77 +232,104 @@ export default function DashboardPage() {
                     <Placeholder xs={4} /> <Placeholder xs={6} />{' '}
                     <Placeholder xs={8} />
                   </Placeholder>
-                  <div className="mt-3 d-flex justify-content-between">
-                    <Placeholder.Button variant="primary" xs={4} />
-                    <Placeholder.Button variant="danger" xs={4} />
-                  </div>
                 </Card.Body>
               </Card>
             </div>
           ))}
         </div>
       ) : filteredLinks.length === 0 ? (
-        <Alert variant="info" className="text-center">
+        <div className="text-center py-5 text-muted">
           {selectedTags.length > 0 || search
             ? 'No links match your filters.'
             : 'You don’t have any saved links yet. Click Add Link to get started!'}
-        </Alert>
-      ) : (
-        <div className="row g-3">
-          {filteredLinks.map((link) => (
-            <div className="col-md-4" key={link.id}>
-              <Card>
-                <Card.Body>
-                  <Card.Title>{link.linkTitle}</Card.Title>
-                  <Card.Text>
-                    {link.linkDescription || 'No description'}
-                  </Card.Text>
-                  {link.tags?.length > 0 && (
-                    <div className="mb-2">
-                      {link.tags.map((tag) => (
-                        <span key={tag} className="badge bg-secondary me-1">
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  <a
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="small"
-                  >
-                    Visit
-                  </a>
-                  <div className="mt-3 d-flex justify-content-between">
-                    <Button
-                      size="sm"
-                      variant="outline-primary"
-                      onClick={() => {
-                        setEditLink(link);
-                        setShowModal(true);
-                      }}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline-danger"
-                      onClick={() => handleDelete(link.id)}
-                      disabled={deletingId === link.id}
-                    >
-                      {deletingId === link.id ? (
-                        <Spinner size="sm" animation="border" />
-                      ) : (
-                        'Delete'
-                      )}
-                    </Button>
-                  </div>
-                </Card.Body>
-              </Card>
-            </div>
-          ))}
         </div>
+      ) : (
+        <>
+          <div className="row g-3">
+            {filteredLinks.map((link, idx) => {
+              const isLast = idx === filteredLinks.length - 1;
+              return (
+                <div
+                  className="col-md-4"
+                  key={link.id}
+                  ref={isLast ? lastElementRef : null}
+                >
+                  <Card>
+                    <Card.Body>
+                      <Card.Title>{link.linkTitle}</Card.Title>
+                      <Card.Text>
+                        {link.linkDescription || 'No description'}
+                      </Card.Text>
+                      {link.tags?.length > 0 && (
+                        <div className="mb-2">
+                          {link.tags.map((tag) => (
+                            <span key={tag} className="badge bg-secondary me-1">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <a
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="small"
+                      >
+                        Visit
+                      </a>
+                      <div className="mt-3 d-flex justify-content-between">
+                        <Button
+                          size="sm"
+                          variant="outline-primary"
+                          onClick={() => {
+                            setEditLink(link);
+                            setShowModal(true);
+                          }}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline-danger"
+                          onClick={() => handleDelete(link.id)}
+                          disabled={deletingId === link.id}
+                        >
+                          {deletingId === link.id ? (
+                            <Spinner size="sm" animation="border" />
+                          ) : (
+                            'Delete'
+                          )}
+                        </Button>
+                      </div>
+                    </Card.Body>
+                  </Card>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Infinite scroll loading indicator */}
+          {loadingMore && (
+            <div className="text-center py-3">
+              <Spinner animation="border" />
+            </div>
+          )}
+
+          {/* Fallback Load More button */}
+          {!loadingMore && hasMore && (
+            <div className="text-center py-3">
+              <Button
+                onClick={() => {
+                  const nextPage = page + 1;
+                  setPage(nextPage);
+                  fetchLinks(nextPage);
+                }}
+              >
+                Load More
+              </Button>
+            </div>
+          )}
+        </>
       )}
 
       {showModal && (
@@ -255,7 +339,10 @@ export default function DashboardPage() {
             setShowModal(false);
             setEditLink(null);
           }}
-          onSaved={fetchLinks}
+          onSaved={() => {
+            toast.success('Link saved');
+            resetAndFetch();
+          }}
           editLink={editLink}
         />
       )}

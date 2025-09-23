@@ -4,19 +4,29 @@ import prisma from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 
-// GET all links for current user
-export async function GET() {
+// GET all links for current user (with pagination)
+export async function GET(req) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const links = await prisma.link.findMany({
-    where: { userId: session.user.id },
-    orderBy: { createdAt: 'desc' },
-  });
+  const { searchParams } = new URL(req.url);
+  const page = parseInt(searchParams.get('page') || '1');
+  const pageSize = parseInt(searchParams.get('pageSize') || '9');
+  const skip = (page - 1) * pageSize;
 
-  return NextResponse.json(links);
+  const [links, total] = await Promise.all([
+    prisma.link.findMany({
+      where: { userId: session.user.id },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: pageSize,
+    }),
+    prisma.link.count({ where: { userId: session.user.id } }),
+  ]);
+
+  return NextResponse.json({ links, total, page, pageSize });
 }
 
 // POST create a new link

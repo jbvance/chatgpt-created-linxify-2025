@@ -33,23 +33,26 @@ export default function LinkFormModal({
 
   const onSubmit = async (data) => {
     setLoading(true);
-    if (editLink) {
-      await fetch(`/api/links/${editLink.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-    } else {
-      await fetch('/api/links', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
+    try {
+      if (editLink) {
+        await fetch(`/api/links/${editLink.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+      } else {
+        await fetch('/api/links', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+      }
+      reset();
+      handleClose();
+      onSaved();
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-    reset();
-    handleClose();
-    onSaved();
   };
 
   return (
@@ -97,7 +100,7 @@ export default function LinkFormModal({
           </Form.Group>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={handleClose}>
+          <Button variant="secondary" onClick={handleClose} disabled={loading}>
             Cancel
           </Button>
           <Button type="submit" disabled={loading}>

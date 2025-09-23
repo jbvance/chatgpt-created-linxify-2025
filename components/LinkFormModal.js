@@ -22,6 +22,7 @@ export default function LinkFormModal({
   handleClose,
   onSaved,
   editLink,
+  quickSaveUrl, // 🔹 new prop
 }) {
   const [saving, setSaving] = useState(false);
   const [categories, setCategories] = useState([]);
@@ -31,6 +32,7 @@ export default function LinkFormModal({
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors },
   } = useForm({
     resolver: yupResolver(schema),
@@ -47,6 +49,7 @@ export default function LinkFormModal({
     fetchCategories();
   }, []);
 
+  // 🔹 Reset form values based on editLink or quickSaveUrl
   useEffect(() => {
     if (editLink) {
       reset({
@@ -58,14 +61,17 @@ export default function LinkFormModal({
       });
     } else {
       reset({
-        url: '',
+        url: quickSaveUrl || '',
         linkTitle: '',
         linkDescription: '',
         tags: [],
         categoryIds: [],
       });
+      if (quickSaveUrl) {
+        setValue('url', quickSaveUrl);
+      }
     }
-  }, [editLink, reset]);
+  }, [editLink, quickSaveUrl, reset, setValue]);
 
   const fetchCategories = async () => {
     try {
@@ -110,7 +116,11 @@ export default function LinkFormModal({
         <Modal.Body>
           <Form.Group className="mb-3">
             <Form.Label>URL</Form.Label>
-            <Form.Control {...register('url')} isInvalid={!!errors.url} />
+            <Form.Control
+              {...register('url')}
+              isInvalid={!!errors.url}
+              defaultValue={quickSaveUrl || ''}
+            />
             <Form.Control.Feedback type="invalid">
               {errors.url?.message}
             </Form.Control.Feedback>

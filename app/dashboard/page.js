@@ -3,7 +3,7 @@
 
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Button,
   Card,
@@ -20,6 +20,7 @@ import CategorySidebar from '@/components/CategorySidebar';
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   // Link state
   const [links, setLinks] = useState([]);
@@ -32,6 +33,7 @@ export default function DashboardPage() {
   // UI state
   const [showModal, setShowModal] = useState(false);
   const [editLink, setEditLink] = useState(null);
+  const [quickSaveUrl, setQuickSaveUrl] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [selectedTags, setSelectedTags] = useState([]);
   const [search, setSearch] = useState('');
@@ -51,6 +53,23 @@ export default function DashboardPage() {
       resetAndFetch();
     }
   }, [status]);
+
+  // 🔹 Handle Quick-Save (`/add?url=...` → /dashboard?addUrl=...)
+  useEffect(() => {
+    const addUrl = searchParams.get('addUrl');
+    if (addUrl) {
+      setEditLink(null); // new link, not editing
+      setQuickSaveUrl(addUrl);
+      setShowModal(true);
+
+      // Clean URL so refresh doesn't keep reopening modal
+      const params = new URLSearchParams(window.location.search);
+      params.delete('addUrl');
+      const newUrl =
+        window.location.pathname + (params.toString() ? `?${params}` : '');
+      window.history.replaceState({}, '', newUrl);
+    }
+  }, [searchParams]);
 
   const resetAndFetch = () => {
     setLinks([]);
@@ -115,7 +134,7 @@ export default function DashboardPage() {
   const filteredLinks = useMemo(() => {
     let result = [...links];
 
-    // Category filter (will work fully once links have categories)
+    // Category filter
     if (selectedCategoryId !== null) {
       result = result.filter((link) =>
         link.categories?.some((c) => c.categoryId === selectedCategoryId)
@@ -372,12 +391,14 @@ export default function DashboardPage() {
           handleClose={() => {
             setShowModal(false);
             setEditLink(null);
+            setQuickSaveUrl(null);
           }}
           onSaved={() => {
             toast.success('Link saved');
             resetAndFetch();
           }}
           editLink={editLink}
+          quickSaveUrl={quickSaveUrl} // pass down for prefill
         />
       )}
     </main>

@@ -31,6 +31,11 @@ export default function ReaderPage() {
   const [note, setNote] = useState('');
   const [buttonPos, setButtonPos] = useState(null);
 
+  // edit state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editHighlight, setEditHighlight] = useState(null);
+  const [editNote, setEditNote] = useState('');
+
   const contentRef = useRef();
 
   // Fetch link + highlights
@@ -256,31 +261,45 @@ export default function ReaderPage() {
                               <small className="text-muted">{h.note}</small>
                             )}
                           </div>
-                          <Button
-                            variant="outline-danger"
-                            size="sm"
-                            onClick={async (e) => {
-                              e.stopPropagation(); // prevent scroll-to-highlight
-                              try {
-                                const res = await fetch(
-                                  `/api/highlights/${h.id}`,
-                                  {
-                                    method: 'DELETE',
-                                  }
-                                );
-                                if (!res.ok) throw new Error('Delete failed');
-                                setHighlights((prev) =>
-                                  prev.filter((hl) => hl.id !== h.id)
-                                );
-                                toast.success('Highlight deleted');
-                              } catch (err) {
-                                console.error(err);
-                                toast.error('Error deleting highlight');
-                              }
-                            }}
-                          >
-                            ✕
-                          </Button>
+                          <div className="d-flex flex-column gap-1">
+                            <Button
+                              variant="outline-secondary"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditHighlight(h);
+                                setEditNote(h.note || '');
+                                setShowEditModal(true);
+                              }}
+                            >
+                              ✏️
+                            </Button>
+                            <Button
+                              variant="outline-danger"
+                              size="sm"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                try {
+                                  const res = await fetch(
+                                    `/api/highlights/${h.id}`,
+                                    {
+                                      method: 'DELETE',
+                                    }
+                                  );
+                                  if (!res.ok) throw new Error('Delete failed');
+                                  setHighlights((prev) =>
+                                    prev.filter((hl) => hl.id !== h.id)
+                                  );
+                                  toast.success('Highlight deleted');
+                                } catch (err) {
+                                  console.error(err);
+                                  toast.error('Error deleting highlight');
+                                }
+                              }}
+                            >
+                              ✕
+                            </Button>
+                          </div>
                         </ListGroup.Item>
                       );
                     })}
@@ -308,7 +327,7 @@ export default function ReaderPage() {
         </Button>
       )}
 
-      {/* Modal to add note */}
+      {/* Modal to add new highlight */}
       <Modal show={showModal} onHide={() => setShowModal(false)}>
         <Modal.Header closeButton>
           <Modal.Title>Add Highlight</Modal.Title>
@@ -332,6 +351,53 @@ export default function ReaderPage() {
             Cancel
           </Button>
           <Button variant="primary" onClick={saveHighlight}>
+            Save
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Modal to edit existing highlight */}
+      <Modal show={showEditModal} onHide={() => setShowEditModal(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>Edit Note</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form.Group>
+            <Form.Label>Note</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={3}
+              value={editNote}
+              onChange={(e) => setEditNote(e.target.value)}
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowEditModal(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={async () => {
+              try {
+                const res = await fetch(`/api/highlights/${editHighlight.id}`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ note: editNote }),
+                });
+                if (!res.ok) throw new Error('Failed to update note');
+                const updated = await res.json();
+                setHighlights((prev) =>
+                  prev.map((h) => (h.id === updated.id ? updated : h))
+                );
+                toast.success('Note updated');
+                setShowEditModal(false);
+              } catch (err) {
+                console.error(err);
+                toast.error('Error updating note');
+              }
+            }}
+          >
             Save
           </Button>
         </Modal.Footer>

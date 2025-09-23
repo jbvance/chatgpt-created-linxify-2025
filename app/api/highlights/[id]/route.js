@@ -106,3 +106,36 @@ export async function DELETE(req, context) {
     );
   }
 }
+/********PUT (UPDATE) */
+export async function PUT(req, context) {
+  try {
+    const { id } = await context.params;
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { note } = await req.json();
+
+    const highlight = await prisma.highlight.findUnique({
+      where: { id: Number(id) },
+    });
+
+    if (!highlight || highlight.userId !== session.user.id) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+
+    const updated = await prisma.highlight.update({
+      where: { id: Number(id) },
+      data: { note },
+    });
+
+    return NextResponse.json(updated);
+  } catch (err) {
+    console.error('PUT /api/highlights error:', err);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}

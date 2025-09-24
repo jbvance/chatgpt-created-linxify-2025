@@ -9,7 +9,7 @@ import {
   Suspense,
 } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Button,
   Card,
@@ -24,15 +24,17 @@ import CreatableSelect from 'react-select/creatable';
 import CategorySidebar from '@/components/CategorySidebar';
 import LinkFormModal from '@/components/LinkFormModal';
 
-// 🔹 QuickSaveHandler wrapped in Suspense
-import { useSearchParams } from 'next/navigation';
+// 🔹 QuickSaveHandler now safe
+import { useEffect as useEffectReact } from 'react';
 function QuickSaveHandler({ onQuickSave }) {
   const searchParams = useSearchParams();
   const addUrl = searchParams.get('addUrl');
 
-  if (addUrl) {
-    onQuickSave(addUrl);
-  }
+  useEffectReact(() => {
+    if (addUrl) {
+      onQuickSave(addUrl);
+    }
+  }, [addUrl, onQuickSave]);
 
   return null;
 }

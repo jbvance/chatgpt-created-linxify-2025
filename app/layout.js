@@ -1,4 +1,5 @@
 // app/layout.js
+import 'bootstrap/dist/css/bootstrap.min.css';
 import './globals.scss';
 import Providers from './providers';
 import Navbar from '@/components/Navbar';

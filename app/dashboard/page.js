@@ -28,13 +28,20 @@ import LinkFormModal from '@/components/LinkFormModal';
 import { useEffect as useEffectReact } from 'react';
 function QuickSaveHandler({ onQuickSave }) {
   const searchParams = useSearchParams();
-  const addUrl = searchParams.get('addUrl');
 
-  useEffectReact(() => {
+  useEffect(() => {
+    const addUrl = searchParams.get('addUrl');
     if (addUrl) {
       onQuickSave(addUrl);
+
+      // Clean the query string from the URL
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete('addUrl');
+      const newUrl =
+        window.location.pathname + (params.toString() ? `?${params}` : '');
+      window.history.replaceState({}, '', newUrl);
     }
-  }, [addUrl, onQuickSave]);
+  }, [searchParams, onQuickSave]);
 
   return null;
 }
@@ -230,18 +237,11 @@ export default function DashboardPage() {
   const hasMore = links.length < total;
 
   // ---------- QuickSave handler callback ----------
-  const handleQuickSave = (url) => {
+  const handleQuickSave = useCallback((url) => {
     setEditLink(null);
     setQuickSaveUrl(url);
     setShowModal(true);
-
-    // clean up the URL
-    const params = new URLSearchParams(window.location.search);
-    params.delete('addUrl');
-    const newUrl =
-      window.location.pathname + (params.toString() ? `?${params}` : '');
-    window.history.replaceState({}, '', newUrl);
-  };
+  }, []);
 
   // ---------- Render ----------
   return (

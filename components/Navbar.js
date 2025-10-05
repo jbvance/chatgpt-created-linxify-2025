@@ -1,59 +1,67 @@
-// components/Navbar.js
+// <mark>HIGHLIGHT</mark>: This is a new file for the main navigation header.
+// app/components/AppNavbar.tsx
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
-import { Container, Nav, Navbar as BsNavbar, Button } from 'react-bootstrap';
+import Container from 'react-bootstrap/Container';
+import Nav from 'react-bootstrap/Nav';
+import Navbar from 'react-bootstrap/Navbar';
+import Button from 'react-bootstrap/Button';
 
-export default function Navbar() {
-  const pathname = usePathname();
-  const { data: session } = useSession();
+export default function AppNavbar() {
+  const { data: session, status } = useSession();
+  const isLoading = status === 'loading';
 
   return (
-    <BsNavbar bg="light" expand="lg" className="border-bottom">
+    <Navbar collapseOnSelect expand="lg" bg="dark" variant="dark" sticky="top">
       <Container>
-        <Link href="/" className="navbar-brand fw-bold">
-          Linxify
+        <Link href={session ? '/dashboard' : '/'} passHref legacyBehavior>
+          <Navbar.Brand>Linxify</Navbar.Brand>
         </Link>
-
-        <BsNavbar.Toggle aria-controls="main-navbar" />
-        <BsNavbar.Collapse id="main-navbar">
-          <Nav className="ms-auto">
-            {session ? (
+        <Navbar.Toggle aria-controls="responsive-navbar-nav" />
+        <Navbar.Collapse id="responsive-navbar-nav">
+          <Nav className="ms-auto align-items-center">
+            {isLoading ? (
+              <Navbar.Text>Loading...</Navbar.Text>
+            ) : session ? (
+              // If user is logged in
               <>
-                <Nav.Item className="me-3 d-flex align-items-center">
-                  <span className="text-muted small">
-                    {session.user?.email}
-                  </span>
-                </Nav.Item>
+                <Link href="/dashboard" passHref legacyBehavior>
+                  <Nav.Link>Dashboard</Nav.Link>
+                </Link>
+                <Navbar.Text className="mx-2">
+                  Signed in as {session.user?.email}
+                </Navbar.Text>
                 <Button
-                  variant="outline-secondary"
+                  variant="outline-light"
                   size="sm"
                   onClick={() => signOut({ callbackUrl: '/' })}
                 >
-                  Logout
+                  Sign Out
                 </Button>
               </>
             ) : (
+              // If user is logged out
               <>
-                <Link
-                  href="/auth/login"
-                  className={`nav-link ${pathname === '/auth/login' ? 'active' : ''}`}
-                >
-                  Login
+                <Link href="/signin" passHref legacyBehavior>
+                  <Nav.Link>Sign In</Nav.Link>
                 </Link>
-                <Link
-                  href="/auth/register"
-                  className={`nav-link ${pathname === '/auth/register' ? 'active' : ''}`}
-                >
-                  Register
+                <Link href="/register" passHref legacyBehavior>
+                  <Nav.Link
+                    as={Button}
+                    variant="primary"
+                    size="sm"
+                    className="ms-2"
+                  >
+                    Register
+                  </Nav.Link>
                 </Link>
               </>
             )}
           </Nav>
-        </BsNavbar.Collapse>
+        </Navbar.Collapse>
       </Container>
-    </BsNavbar>
+    </Navbar>
   );
 }

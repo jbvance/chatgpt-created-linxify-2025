@@ -182,7 +182,7 @@ export default function ReaderPage() {
       <div className="container py-5">
         <Alert variant="danger">Error: {error}</Alert>
         <Button onClick={() => router.push('/dashboard')}>
-          Back to Dashboard
+          &larr; Back to Dashboard
         </Button>
       </div>
     );
@@ -201,7 +201,7 @@ export default function ReaderPage() {
             className="me-2"
             onClick={() => router.push('/dashboard')}
           >
-            Back to Dashboard
+            &larr; Back to Dashboard
           </Button>
           <Button
             variant="primary"
